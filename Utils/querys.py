@@ -52,11 +52,11 @@ class Querys:
             
             if flag_excel:
                 sql = """
-                    SELECT * FROM dbo.intranet_verificacion_items
+                    SELECT * FROM dbo.intranet_verificacion_items WHERE estado = 1
                 """
             else:
                 sql = """
-                    SELECT *, COUNT(*) OVER() AS total_registros FROM dbo.intranet_verificacion_items
+                    SELECT *, COUNT(*) OVER() AS total_registros FROM dbo.intranet_verificacion_items WHERE estado = 1
                 """
             
             if fecha_desde and fecha_hasta:
@@ -106,7 +106,7 @@ class Querys:
 
     # Query que complementa la inicial que filtra por fechas
     def add_fecha_query(self, sql, fecha_desde, fecha_hasta):
-        sql = sql + " WHERE created_at BETWEEN :fecha_desde AND :fecha_hasta"
+        sql = sql + " AND created_at BETWEEN :fecha_desde AND :fecha_hasta"
         self.query_params.update({"fecha_desde": f"{fecha_desde} 00:00:00", "fecha_hasta": f"{fecha_hasta} 23:59:59"})
         return sql
 
