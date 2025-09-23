@@ -55,7 +55,7 @@ class Verificacion:
                 return self.tools.output(200, message, data={
                 "total_registros": 0,
                 "total_pag": 0,
-                "posicion_pag": 0,
+                "posicion_pag": 1,
                 "registros": []
             })
                 
