@@ -39,7 +39,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Exponer puerto
-EXPOSE 8002
+EXPOSE 8007
 
 # Comando de inicio
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002", "--reload"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8007", "--reload"]
