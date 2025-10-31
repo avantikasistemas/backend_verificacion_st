@@ -5,6 +5,11 @@ from Models.IntranetVerificacionModel import IntranetVerificacionModel
 from Models.IntranetLugarInspeccionModel import IntranetLugarInspeccionModel
 from Models.IntranetResponsableXLugarModel import IntranetResponsableXLugarModel
 from Models.IntranetResponsableVerificacionModel import IntranetResponsableVerificacionModel
+from Models.IntranetTipoInspeccionModel import IntranetTipoInspeccionModel
+from Models.IntranetAspectosCargaModel import IntranetAspectosCargaModel
+from Models.IntranetRelacionInspeccionAspectoModel import IntranetRelacionInspeccionAspectoModel
+from Models.IntranetTipoAspectosInfraestructuraModel import IntranetTipoAspectosInfraestructuraModel
+from Models.IntranetAspectosInfraestructuraModel import IntranetAspectosInfraestructuraModel
 
 class Querys:
 
@@ -295,6 +300,86 @@ class Querys:
                         "id": row.id,
                         "nombre": row.nombre
                     })
+            
+            return response
+        except Exception as ex:
+            print(str(ex))
+            raise CustomException(str(ex))
+        finally:
+            self.db.close()
+
+    # Query para obtener los tipos de inspección
+    def obtener_tipo_inspeccion(self):
+        """ Retorna la lista de tipos de inspección activos """
+        response = []
+        try:
+            result = self.db.query(
+                IntranetTipoInspeccionModel.id,
+                IntranetTipoInspeccionModel.nombre
+            ).filter(
+                IntranetTipoInspeccionModel.estado == 1
+            ).all()
+            
+            if result:
+                for row in result:
+                    response.append({
+                        "id": row.id,
+                        "nombre": row.nombre
+                    })
+            
+            return response
+        except Exception as ex:
+            print(str(ex))
+            raise CustomException(str(ex))
+        finally:
+            self.db.close()
+
+    # Query para obtener los aspectos de carga según tipo de inspección
+    def obtener_aspectos_por_tipo_inspeccion(self, tipo_inspeccion_id):
+        """ Retorna la lista de aspectos agrupados por tipo/sección según el tipo de inspección """
+        response = []
+        try:
+            # Hacer JOIN entre las tablas de relación, tipo de aspecto y aspectos de carga
+            result = self.db.query(
+                IntranetRelacionInspeccionAspectoModel.tipo_aspecto_id,
+                IntranetTipoAspectosInfraestructuraModel.nombre.label('nombre_seccion'),
+                IntranetAspectosCargaModel.id.label('aspecto_id'),
+                IntranetAspectosCargaModel.nombre.label('nombre_aspecto')
+            ).join(
+                IntranetTipoAspectosInfraestructuraModel,
+                IntranetRelacionInspeccionAspectoModel.tipo_aspecto_id == IntranetTipoAspectosInfraestructuraModel.id
+            ).join(
+                IntranetAspectosCargaModel,
+                IntranetAspectosCargaModel.tipo_aspecto_id == IntranetTipoAspectosInfraestructuraModel.id
+            ).filter(
+                IntranetRelacionInspeccionAspectoModel.tipo_inspeccion_id == tipo_inspeccion_id,
+                IntranetAspectosCargaModel.tipo_inspeccion == tipo_inspeccion_id,
+                IntranetRelacionInspeccionAspectoModel.estado == 1,
+                IntranetTipoAspectosInfraestructuraModel.estado == 1,
+                IntranetAspectosCargaModel.estado == 1
+            ).order_by(
+                IntranetAspectosCargaModel.id
+            ).all()
+            
+            # Agrupar por secciones
+            secciones_dict = {}
+            for row in result:
+                seccion_id = row.tipo_aspecto_id
+                
+                if seccion_id not in secciones_dict:
+                    secciones_dict[seccion_id] = {
+                        "seccion_id": seccion_id,
+                        "seccion_nombre": row.nombre_seccion,
+                        "aspectos": []
+                    }
+                
+                secciones_dict[seccion_id]["aspectos"].append({
+                    "id": row.aspecto_id,
+                    "nombre": row.nombre_aspecto
+                })
+            
+            # Convertir el diccionario a lista
+            response = list(secciones_dict.values())
             
             return response
         except Exception as ex:

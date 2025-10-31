@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from Config.db import BASE, engine
 from Middleware.get_json import JSONMiddleware
 from Router.Verificacion import verificacion_router
+from Router.Inspeccion import inspeccion_router
 from pathlib import Path
 
 route = Path.cwd()
@@ -18,6 +19,7 @@ app.add_middleware(
     allow_headers=["*"],  # Permitir todos los encabezados; puedes especificar los encabezados permitidos.
 )
 app.include_router(verificacion_router)
+app.include_router(inspeccion_router)
 
 BASE.metadata.create_all(bind=engine)
 
