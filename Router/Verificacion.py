@@ -32,3 +32,10 @@ def obtener_responsables_por_lugar(request: Request, db: Session = Depends(get_d
     data = getattr(request.state, "json_data", {})
     response = Verificacion(db).obtener_responsables_por_lugar(data)
     return response
+
+@verificacion_router.post('/obtener_aspectos_por_lugar', tags=["Verificacion"], response_model=dict)
+@http_decorator
+def obtener_aspectos_por_lugar(request: Request, db: Session = Depends(get_db)):
+    data = getattr(request.state, "json_data", {})
+    response = Verificacion(db).obtener_aspectos_por_lugar(data)
+    return response

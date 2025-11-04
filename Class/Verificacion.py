@@ -13,7 +13,7 @@ class Verificacion:
 
     # Función guardar masivo
     def guardar_verificacion(self, data: dict):
-        """ Api que realiza el guardado de los datos. """
+        """ Api que realiza el guardado de los datos con aspectos dinámicos. """
         try:
             # Validar que los campos principales existan
             if not data.get("lugar_inspeccion_id"):
@@ -25,29 +25,25 @@ class Verificacion:
             if not data.get("novedades"):
                 raise CustomException("El campo novedades es requerido.")
 
-            # Validar aspectos generales
-            aspectos_generales = data.get("aspectos_generales", {})
-            self._validar_aspectos(aspectos_generales, "aspectos_generales", 4)
+            # Validar aspectos dinámicos
+            aspectos_generales_dinamicos = data.get("aspectos_generales_dinamicos", {})
+            if not aspectos_generales_dinamicos:
+                raise CustomException("Debe completar al menos un aspecto de verificación.")
             
-            # Validar paredes
-            paredes = data.get("paredes", {})
-            self._validar_aspectos(paredes, "paredes", 4)
-            
-            # Validar puertas
-            puertas = data.get("puertas", {})
-            self._validar_aspectos(puertas, "puertas", 5)
-            
-            # Validar piso
-            piso = data.get("piso", {})
-            self._validar_aspectos(piso, "piso", 4)
-            
-            # Validar techo
-            techo = data.get("techo", {})
-            self._validar_aspectos(techo, "techo", 3)
-            
-            # Validar seguridad
-            seguridad = data.get("seguridad", {})
-            self._validar_aspectos(seguridad, "seguridad", 4)
+            # Validar que todos los aspectos tengan valores válidos
+            for key, value in aspectos_generales_dinamicos.items():
+                if value is None or value == "":
+                    raise CustomException(
+                        f"Todos los aspectos deben ser evaluados. El aspecto '{key}' no tiene valor."
+                    )
+                
+                # Verificar que sea uno de los valores permitidos
+                value_str = str(value)
+                if value_str not in ["0", "1", "2"]:
+                    raise CustomException(
+                        f"El aspecto '{key}' tiene un valor inválido '{value}'. "
+                        f"Solo se permiten los valores: 0 (NO), 1 (SI) o 2 (N/A)."
+                    )
             
             # Guardamos la información en la base de datos.
             self.querys.guardar_verificacion(data)
@@ -217,4 +213,28 @@ class Verificacion:
 
         except CustomException as e:
             print(f"Error al obtener responsables: {e}")
+            raise CustomException(f"{e}")
+
+    # Función para obtener los aspectos por lugar de inspección
+    def obtener_aspectos_por_lugar(self, data: dict):
+        """ Api que obtiene los aspectos de infraestructura asociados a un lugar de inspección. """
+        try:
+            lugar_id = data.get("lugar_id")
+            
+            if not lugar_id:
+                message = "El campo lugar_id es requerido."
+                raise CustomException(message)
+            
+            # Obtenemos los aspectos desde la base de datos
+            aspectos = self.querys.obtener_aspectos_por_lugar_inspeccion(lugar_id)
+            
+            if not aspectos:
+                message = "No hay aspectos asociados a este lugar de inspección."
+                return self.tools.output(200, message, data=[])
+            
+            # Retornamos la información
+            return self.tools.output(200, "Aspectos cargados con éxito.", aspectos)
+
+        except CustomException as e:
+            print(f"Error al obtener aspectos: {e}")
             raise CustomException(f"{e}")

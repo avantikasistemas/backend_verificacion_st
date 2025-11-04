@@ -3,12 +3,15 @@ from Utils.image_utils import ImageUtils
 from sqlalchemy import text, func
 from datetime import date, datetime
 from Models.IntranetVerificacionModel import IntranetVerificacionModel
+from Models.IntranetVerificacionDetalleModel import IntranetVerificacionDetalleModel
+from Models.IntranetVerificacionImagenModel import IntranetVerificacionImagenModel
 from Models.IntranetLugarInspeccionModel import IntranetLugarInspeccionModel
 from Models.IntranetResponsableXLugarModel import IntranetResponsableXLugarModel
 from Models.IntranetResponsableVerificacionModel import IntranetResponsableVerificacionModel
 from Models.IntranetTipoInspeccionModel import IntranetTipoInspeccionModel
 from Models.IntranetAspectosCargaModel import IntranetAspectosCargaModel
 from Models.IntranetRelacionInspeccionAspectoModel import IntranetRelacionInspeccionAspectoModel
+from Models.IntranetRelacionLugarAspectoModel import IntranetRelacionLugarAspectoModel
 from Models.IntranetTipoAspectosInfraestructuraModel import IntranetTipoAspectosInfraestructuraModel
 from Models.IntranetAspectosInfraestructuraModel import IntranetAspectosInfraestructuraModel
 from Models.IntranetInspeccionCargaModel import IntranetInspeccionCargaModel
@@ -61,56 +64,65 @@ class Querys:
     # Query para guardar verificacion
     def guardar_verificacion(self, data: dict):
         try:
-            # Extraer los objetos anidados
-            aspectos_generales = data.get("aspectos_generales", {})
-            paredes = data.get("paredes", {})
-            puertas = data.get("puertas", {})
-            piso = data.get("piso", {})
-            techo = data.get("techo", {})
-            seguridad = data.get("seguridad", {})
+            # Extraer aspectos dinámicos
+            aspectos_generales_dinamicos = data.get("aspectos_generales_dinamicos", {})
             
-            # Crear el diccionario con la estructura que espera el modelo
-            datos_modelo = {
+            # Extraer imágenes
+            imagenes = data.get("imagenes", [])
+            
+            # Crear el registro maestro con solo los datos principales
+            datos_maestro = {
                 "lugar_inspeccion_id": data.get("lugar_inspeccion_id"),
                 "responsable_verificacion_id": data.get("responsable_verificacion_id"),
-                # Aspectos generales
-                "aspectos_1": int(aspectos_generales.get("aspecto_1")),
-                "aspectos_2": int(aspectos_generales.get("aspecto_2")),
-                "aspectos_3": int(aspectos_generales.get("aspecto_3")),
-                "aspectos_4": int(aspectos_generales.get("aspecto_4")),
-                # Paredes
-                "paredes_1": int(paredes.get("paredes_1")),
-                "paredes_2": int(paredes.get("paredes_2")),
-                "paredes_3": int(paredes.get("paredes_3")),
-                "paredes_4": int(paredes.get("paredes_4")),
-                # Puertas
-                "puertas_1": int(puertas.get("puertas_1")),
-                "puertas_2": int(puertas.get("puertas_2")),
-                "puertas_3": int(puertas.get("puertas_3")),
-                "puertas_4": int(puertas.get("puertas_4")),
-                "puertas_5": int(puertas.get("puertas_5")),
-                # Pisos (nota: en el modelo es "pisos_" no "piso_")
-                "pisos_1": int(piso.get("piso_1")),
-                "pisos_2": int(piso.get("piso_2")),
-                "pisos_3": int(piso.get("piso_3")),
-                "pisos_4": int(piso.get("piso_4")),
-                # Techo
-                "techo_1": int(techo.get("techo_1")),
-                "techo_2": int(techo.get("techo_2")),
-                "techo_3": int(techo.get("techo_3")),
-                # Seguridad
-                "seguridad_1": int(seguridad.get("seguridad_1")),
-                "seguridad_2": int(seguridad.get("seguridad_2")),
-                "seguridad_3": int(seguridad.get("seguridad_3")),
-                "seguridad_4": int(seguridad.get("seguridad_4")),
-                # Novedades
                 "novedades": data.get("novedades")
             }
             
-            # Crear la instancia del modelo con los datos transformados
-            nuevo_registro = IntranetVerificacionModel(datos_modelo)
-            
+            # Crear la instancia del modelo maestro
+            nuevo_registro = IntranetVerificacionModel(datos_maestro)
             self.db.add(nuevo_registro)
+            self.db.flush()  # Para obtener el ID generado sin hacer commit completo
+            
+            # Obtener el ID del registro maestro recién creado
+            verificacion_id = nuevo_registro.id
+            
+            # Guardar cada aspecto en la tabla detalle
+            for key, value in aspectos_generales_dinamicos.items():
+                # Extraer el ID del aspecto desde la clave (formato: "aspecto_X")
+                aspecto_id = int(key.split("_")[1])
+                
+                # Crear el registro detalle
+                datos_detalle = {
+                    "verificacion_id": verificacion_id,
+                    "aspecto_id": aspecto_id,
+                    "valor_seleccionado": int(value),
+                    "estado": 1
+                }
+                
+                nuevo_detalle = IntranetVerificacionDetalleModel(datos_detalle)
+                self.db.add(nuevo_detalle)
+            
+            # Guardar imágenes si existen
+            image_utils = ImageUtils()
+            for imagen in imagenes:
+                if imagen.get("base64"):
+                    # Guardar imagen en disco
+                    nombre_archivo, ruta_archivo = image_utils.save_base64_image(
+                        imagen["base64"], 
+                        imagen["nombre"]
+                    )
+                    
+                    # Crear registro en BD
+                    datos_imagen = {
+                        "verificacion_id": verificacion_id,
+                        "nombre_archivo": nombre_archivo,
+                        "ruta_archivo": ruta_archivo,
+                        "estado": 1
+                    }
+                    
+                    nueva_imagen = IntranetVerificacionImagenModel(datos_imagen)
+                    self.db.add(nueva_imagen)
+            
+            # Hacer commit de todos los cambios
             self.db.commit()
             return True
         except Exception as ex:
@@ -131,6 +143,7 @@ class Querys:
             limit = data["limit"]
             position = data["position"]
             flag_excel = data["flag_excel"]
+            lugar_inspeccion_id = data.get("lugar_inspeccion_id")
             
             # Crear query base con SQLAlchemy incluyendo JOINs
             query = self.db.query(
@@ -144,6 +157,10 @@ class Querys:
                 IntranetResponsableVerificacionModel,
                 IntranetVerificacionModel.responsable_verificacion_id == IntranetResponsableVerificacionModel.id
             ).filter(IntranetVerificacionModel.estado == 1)
+            
+            # Aplicar filtro por lugar de inspección si existe
+            if lugar_inspeccion_id and lugar_inspeccion_id != 'null':
+                query = query.filter(IntranetVerificacionModel.lugar_inspeccion_id == lugar_inspeccion_id)
             
             # Aplicar filtro de fechas si existen
             if fecha_desde and fecha_hasta:
@@ -162,43 +179,40 @@ class Querys:
             if flag_excel:
                 # Para Excel, devolver todos los registros
                 result = query.all()
-                registros = [
-                    {
+                registros = []
+                
+                for row in result:
+                    # Obtener los detalles (aspectos) de esta verificación
+                    detalles = self.db.query(
+                        IntranetVerificacionDetalleModel,
+                        IntranetAspectosInfraestructuraModel.nombre.label('aspecto_nombre')
+                    ).join(
+                        IntranetAspectosInfraestructuraModel,
+                        IntranetVerificacionDetalleModel.aspecto_id == IntranetAspectosInfraestructuraModel.id
+                    ).filter(
+                        IntranetVerificacionDetalleModel.verificacion_id == row.IntranetVerificacionModel.id,
+                        IntranetVerificacionDetalleModel.estado == 1
+                    ).all()
+                    
+                    # Crear diccionario base
+                    registro = {
                         "id": row.IntranetVerificacionModel.id,
                         "lugar_inspeccion": row.nombre_lugar,
                         "responsable_verificacion": row.nombre_responsable,
-                        # "lugar_inspeccion_id": row.IntranetVerificacionModel.lugar_inspeccion_id,
-                        # "responsable_verificacion_id": row.IntranetVerificacionModel.responsable_verificacion_id,
-                        "aspectos_1": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.aspectos_1),
-                        "aspectos_2": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.aspectos_2),
-                        "aspectos_3": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.aspectos_3),
-                        "aspectos_4": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.aspectos_4),
-                        "paredes_1": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.paredes_1),
-                        "paredes_2": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.paredes_2),
-                        "paredes_3": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.paredes_3),
-                        "paredes_4": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.paredes_4),
-                        "puertas_1": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.puertas_1),
-                        "puertas_2": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.puertas_2),
-                        "puertas_3": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.puertas_3),
-                        "puertas_4": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.puertas_4),
-                        "puertas_5": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.puertas_5),
-                        "pisos_1": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.pisos_1),
-                        "pisos_2": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.pisos_2),
-                        "pisos_3": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.pisos_3),
-                        "pisos_4": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.pisos_4),
-                        "techo_1": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.techo_1),
-                        "techo_2": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.techo_2),
-                        "techo_3": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.techo_3),
-                        "seguridad_1": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.seguridad_1),
-                        "seguridad_2": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.seguridad_2),
-                        "seguridad_3": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.seguridad_3),
-                        "seguridad_4": self._convertir_valor_aspecto_excel(row.IntranetVerificacionModel.seguridad_4),                        
                         "novedades": row.IntranetVerificacionModel.novedades,
                         "estado": row.IntranetVerificacionModel.estado,
                         "created_at": str(row.IntranetVerificacionModel.created_at)
                     }
-                    for row in result
-                ] if result else []
+                    
+                    # Agregar cada aspecto como columna dinámica
+                    for detalle in detalles:
+                        aspecto_key = f"aspecto_{detalle.IntranetVerificacionDetalleModel.aspecto_id}"
+                        registro[aspecto_key] = self._convertir_valor_aspecto_excel(
+                            detalle.IntranetVerificacionDetalleModel.valor_seleccionado
+                        )
+                    
+                    registros.append(registro)
+                
                 return registros
             
             # Obtener el total de registros
@@ -210,6 +224,61 @@ class Querys:
 
             if result:
                 for row in result:
+                    # Obtener los detalles (aspectos) de esta verificación agrupados por tipo
+                    detalles = self.db.query(
+                        IntranetVerificacionDetalleModel,
+                        IntranetAspectosInfraestructuraModel.nombre.label('aspecto_nombre'),
+                        IntranetTipoAspectosInfraestructuraModel.nombre.label('tipo_nombre'),
+                        IntranetTipoAspectosInfraestructuraModel.id.label('tipo_id')
+                    ).join(
+                        IntranetAspectosInfraestructuraModel,
+                        IntranetVerificacionDetalleModel.aspecto_id == IntranetAspectosInfraestructuraModel.id
+                    ).join(
+                        IntranetTipoAspectosInfraestructuraModel,
+                        IntranetAspectosInfraestructuraModel.tipo_aspecto_id == IntranetTipoAspectosInfraestructuraModel.id
+                    ).filter(
+                        IntranetVerificacionDetalleModel.verificacion_id == row.IntranetVerificacionModel.id,
+                        IntranetVerificacionDetalleModel.estado == 1
+                    ).order_by(
+                        IntranetTipoAspectosInfraestructuraModel.id,
+                        IntranetAspectosInfraestructuraModel.id
+                    ).all()
+                    
+                    # Agrupar aspectos por tipo
+                    aspectos_agrupados = {}
+                    for detalle in detalles:
+                        tipo_id = detalle.tipo_id
+                        tipo_nombre = detalle.tipo_nombre
+                        
+                        if tipo_id not in aspectos_agrupados:
+                            aspectos_agrupados[tipo_id] = {
+                                "nombre": tipo_nombre,
+                                "aspectos": []
+                            }
+                        
+                        aspectos_agrupados[tipo_id]["aspectos"].append({
+                            "id": detalle.IntranetVerificacionDetalleModel.aspecto_id,
+                            "nombre": detalle.aspecto_nombre,
+                            "valor": self._convertir_valor_aspecto(
+                                detalle.IntranetVerificacionDetalleModel.valor_seleccionado
+                            )
+                        })
+                    
+                    # Obtener imágenes de esta verificación
+                    imagenes = self.db.query(IntranetVerificacionImagenModel).filter(
+                        IntranetVerificacionImagenModel.verificacion_id == row.IntranetVerificacionModel.id,
+                        IntranetVerificacionImagenModel.estado == 1
+                    ).all()
+                    
+                    imagenes_list = [
+                        {
+                            "id": img.id,
+                            "nombre_archivo": img.nombre_archivo,
+                            "ruta_archivo": img.ruta_archivo
+                        }
+                        for img in imagenes
+                    ]
+                    
                     response.append(
                         {
                             "id": row.IntranetVerificacionModel.id,
@@ -217,30 +286,8 @@ class Querys:
                             "responsable_verificacion": row.nombre_responsable,
                             "lugar_inspeccion_id": row.IntranetVerificacionModel.lugar_inspeccion_id,
                             "responsable_verificacion_id": row.IntranetVerificacionModel.responsable_verificacion_id,
-                            "aspectos_1": self._convertir_valor_aspecto(row.IntranetVerificacionModel.aspectos_1),
-                            "aspectos_2": self._convertir_valor_aspecto(row.IntranetVerificacionModel.aspectos_2),
-                            "aspectos_3": self._convertir_valor_aspecto(row.IntranetVerificacionModel.aspectos_3),
-                            "aspectos_4": self._convertir_valor_aspecto(row.IntranetVerificacionModel.aspectos_4),
-                            "paredes_1": self._convertir_valor_aspecto(row.IntranetVerificacionModel.paredes_1),
-                            "paredes_2": self._convertir_valor_aspecto(row.IntranetVerificacionModel.paredes_2),
-                            "paredes_3": self._convertir_valor_aspecto(row.IntranetVerificacionModel.paredes_3),
-                            "paredes_4": self._convertir_valor_aspecto(row.IntranetVerificacionModel.paredes_4),
-                            "puertas_1": self._convertir_valor_aspecto(row.IntranetVerificacionModel.puertas_1),
-                            "puertas_2": self._convertir_valor_aspecto(row.IntranetVerificacionModel.puertas_2),
-                            "puertas_3": self._convertir_valor_aspecto(row.IntranetVerificacionModel.puertas_3),
-                            "puertas_4": self._convertir_valor_aspecto(row.IntranetVerificacionModel.puertas_4),
-                            "puertas_5": self._convertir_valor_aspecto(row.IntranetVerificacionModel.puertas_5),
-                            "pisos_1": self._convertir_valor_aspecto(row.IntranetVerificacionModel.pisos_1),
-                            "pisos_2": self._convertir_valor_aspecto(row.IntranetVerificacionModel.pisos_2),
-                            "pisos_3": self._convertir_valor_aspecto(row.IntranetVerificacionModel.pisos_3),
-                            "pisos_4": self._convertir_valor_aspecto(row.IntranetVerificacionModel.pisos_4),
-                            "techo_1": self._convertir_valor_aspecto(row.IntranetVerificacionModel.techo_1),
-                            "techo_2": self._convertir_valor_aspecto(row.IntranetVerificacionModel.techo_2),
-                            "techo_3": self._convertir_valor_aspecto(row.IntranetVerificacionModel.techo_3),
-                            "seguridad_1": self._convertir_valor_aspecto(row.IntranetVerificacionModel.seguridad_1),
-                            "seguridad_2": self._convertir_valor_aspecto(row.IntranetVerificacionModel.seguridad_2),
-                            "seguridad_3": self._convertir_valor_aspecto(row.IntranetVerificacionModel.seguridad_3),
-                            "seguridad_4": self._convertir_valor_aspecto(row.IntranetVerificacionModel.seguridad_4),                        
+                            "aspectos_agrupados": list(aspectos_agrupados.values()),
+                            "imagenes": imagenes_list,
                             "novedades": row.IntranetVerificacionModel.novedades,
                             "estado": row.IntranetVerificacionModel.estado,
                             "fecha_creacion": row.IntranetVerificacionModel.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.IntranetVerificacionModel.created_at else None
@@ -705,6 +752,69 @@ class Querys:
                         "id": row.id,
                         "nombre": row.nombre
                     })
+            
+            return response
+        except Exception as ex:
+            print(str(ex))
+            raise CustomException(str(ex))
+        finally:
+            self.db.close()
+
+        # Query para obtener los aspectos de infraestructura según lugar de inspección
+
+    # Query para obtener los aspectos de infraestructura según lugar de inspección
+    def obtener_aspectos_por_lugar_inspeccion(self, lugar_inspeccion_id: int):
+        """ 
+        Retorna la lista de aspectos de infraestructura agrupados por tipo/sección 
+        según el lugar de inspección seleccionado, usando la tabla de relación.
+        """
+        response = []
+        try:
+            # Hacer JOIN con la tabla de relación para obtener solo los aspectos
+            # que corresponden al lugar de inspección seleccionado
+            result = self.db.query(
+                IntranetTipoAspectosInfraestructuraModel.id.label('tipo_aspecto_id'),
+                IntranetTipoAspectosInfraestructuraModel.nombre.label('tipo_aspecto_nombre'),
+                IntranetAspectosInfraestructuraModel.id.label('aspecto_id'),
+                IntranetAspectosInfraestructuraModel.nombre.label('aspecto_nombre')
+            ).join(
+                IntranetAspectosInfraestructuraModel,
+                IntranetTipoAspectosInfraestructuraModel.id == IntranetAspectosInfraestructuraModel.tipo_aspecto_id
+            ).join(
+                IntranetRelacionLugarAspectoModel,
+                IntranetAspectosInfraestructuraModel.id == IntranetRelacionLugarAspectoModel.aspecto_infraestructura_id
+            ).filter(
+                IntranetRelacionLugarAspectoModel.lugar_inspeccion_id == lugar_inspeccion_id,
+                IntranetRelacionLugarAspectoModel.estado == 1,
+                IntranetTipoAspectosInfraestructuraModel.estado == 1,
+                IntranetAspectosInfraestructuraModel.estado == 1
+            ).order_by(
+                IntranetTipoAspectosInfraestructuraModel.id,
+                IntranetAspectosInfraestructuraModel.id
+            ).all()
+            
+            # Agrupar por tipo de aspecto (sección)
+            aspectos_agrupados = {}
+            
+            for row in result:
+                tipo_id = row.tipo_aspecto_id
+                
+                # Si es un nuevo tipo, crear la sección
+                if tipo_id not in aspectos_agrupados:
+                    aspectos_agrupados[tipo_id] = {
+                        "seccion_id": tipo_id,
+                        "seccion_nombre": row.tipo_aspecto_nombre,
+                        "aspectos": []
+                    }
+                
+                # Agregar el aspecto a la sección
+                aspectos_agrupados[tipo_id]["aspectos"].append({
+                    "id": row.aspecto_id,
+                    "nombre": row.aspecto_nombre
+                })
+            
+            # Convertir el diccionario a lista
+            response = list(aspectos_agrupados.values())
             
             return response
         except Exception as ex:
