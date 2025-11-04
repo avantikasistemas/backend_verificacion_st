@@ -124,3 +124,17 @@ class ImageUtils:
             str: Ruta completa de la imagen
         """
         return os.path.join(self.upload_folder, ruta_relativa)
+    
+    def save_base64_image(self, base64_string, nombre_original=None):
+        """
+        Guarda una imagen desde base64 (método de compatibilidad).
+        
+        Args:
+            base64_string (str): String base64 de la imagen
+            nombre_original (str): Nombre original del archivo (opcional)
+            
+        Returns:
+            tuple: (nombre_archivo, ruta_archivo)
+        """
+        resultado = self.comprimir_y_guardar_imagen(base64_string, nombre_original)
+        return resultado["nombre_archivo"], resultado["ruta_archivo"]
