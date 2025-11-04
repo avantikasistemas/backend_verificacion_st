@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from Class.Inspeccion import Inspeccion
 from Utils.decorator import http_decorator
 from Config.db import get_db
+from fastapi.responses import Response as FastAPIResponse
 
 inspeccion_router = APIRouter()
 
@@ -26,11 +27,14 @@ def guardar_carga(request: Request, db: Session = Depends(get_db)):
     response = Inspeccion(db).guardar_carga(data)
     return response
 
-@inspeccion_router.post('/cargar_datos_carga', tags=["Inspeccion"], response_model=dict)
+@inspeccion_router.post('/cargar_datos_carga', tags=["Inspeccion"])
 @http_decorator
 def cargar_datos_carga(request: Request, db: Session = Depends(get_db)):
     data = getattr(request.state, "json_data", {})
     response = Inspeccion(db).cargar_datos_carga(data)
+    # Si es una respuesta de tipo FastAPI Response (Excel), devolverla directamente
+    if isinstance(response, FastAPIResponse):
+        return response
     return response
 
 @inspeccion_router.post('/obtener_aduanas', tags=["Inspeccion"], response_model=dict)

@@ -100,7 +100,7 @@ class Verificacion:
             
             if data["flag_excel"]:
                 registros = self.querys.cargar_datos(data)
-                datos_excel = self.exportar_excel(registros)
+                datos_excel = self.exportar_excel(registros, data.get("lugar_inspeccion_id"))
                 return Response(
                     content=datos_excel["output"].read(), 
                     headers=datos_excel["headers"], 
@@ -154,24 +154,238 @@ class Verificacion:
             print(f"Error al cargar datos: {e}")
             raise CustomException(f"{e}")
 
-    # Función que realiza la operacion de exporte con libreria de excel
-    def exportar_excel(self, datos: list):
-
-        # Convertir los datos a un DataFrame de pandas
-        df = pd.DataFrame(datos)
-
-        # Crear un buffer de memoria para el archivo Excel
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Datos")
-
-        # Obtener los bytes del archivo y preparar la respuesta
-        output.seek(0)
-        headers = {
-            "Content-Disposition": "attachment; filename=datos.xlsx",
-            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        }
-        return {"output": output, "headers": headers}
+    # Función que realiza la operacion de exportar a Excel con formato profesional
+    def exportar_excel(self, registros: list, lugar_inspeccion_id: int = None):
+        """
+        Exporta los registros de verificaciones a un archivo Excel
+        con formato similar a la imagen proporcionada.
+        
+        Args:
+            registros: Lista de verificaciones con sus aspectos
+            lugar_inspeccion_id: ID del lugar de inspección para filtrar
+        """
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+            from openpyxl.utils import get_column_letter
+            
+            # Crear un nuevo workbook
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Verificaciones"
+            
+            # Definir estilos
+            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF", size=11)
+            subheader_fill = PatternFill(start_color="B4C7E7", end_color="B4C7E7", fill_type="solid")
+            subheader_font = Font(bold=True, size=10)
+            border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            
+            # Obtener el lugar de inspección para el título
+            lugar_nombre = registros[0]["lugar_inspeccion"] if registros else "Inspección"
+            
+            # Título principal
+            ws.merge_cells('A1:Z1')
+            ws['A1'] = f"LISTA DE CHEQUEO - CONTROL FÍSICO Y SEGURIDAD ({lugar_nombre.upper()})"
+            ws['A1'].font = Font(bold=True, size=14)
+            ws['A1'].alignment = center_alignment
+            ws['A1'].fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+            
+            # Si no hay registros, retornar archivo vacío
+            if not registros:
+                output = BytesIO()
+                wb.save(output)
+                output.seek(0)
+                headers = {
+                    "Content-Disposition": f"attachment; filename=verificacion_{lugar_nombre.replace(' ', '_')}.xlsx",
+                    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                }
+                return {"output": output, "headers": headers}
+            
+            # Obtener todos los aspectos únicos y sus secciones del primer registro
+            aspectos_header = []
+            for seccion in registros[0].get("aspectos_agrupados", []):
+                for aspecto in seccion["aspectos"]:
+                    aspectos_header.append({
+                        "seccion": seccion["nombre"],
+                        "aspecto": aspecto["nombre"]
+                    })
+            
+            # Fila 3: Encabezados de columnas principales
+            current_row = 3
+            col_index = 1
+            
+            # Columnas fijas iniciales - FECHA primero
+            columnas_fijas = [
+                "FECHA",
+                "REGISTRO",
+                "LUGAR INSPECCIÓN",
+                "RESPONSABLE"
+            ]
+            
+            # Escribir columnas fijas
+            for col_name in columnas_fijas:
+                cell = ws.cell(row=current_row, column=col_index)
+                cell.value = col_name
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = center_alignment
+                cell.border = border
+                col_index += 1
+            
+            # Agrupar aspectos por sección para los encabezados
+            secciones_agrupadas = {}
+            for item in aspectos_header:
+                seccion = item["seccion"]
+                if seccion not in secciones_agrupadas:
+                    secciones_agrupadas[seccion] = []
+                secciones_agrupadas[seccion].append(item["aspecto"])
+            
+            # Fila 2: Encabezados de sección (merge cells)
+            current_col = len(columnas_fijas) + 1
+            for seccion, aspectos in secciones_agrupadas.items():
+                start_col = current_col
+                end_col = current_col + len(aspectos) - 1
+                
+                # Merge cells para el nombre de la sección
+                if start_col == end_col:
+                    cell = ws.cell(row=2, column=start_col)
+                else:
+                    ws.merge_cells(start_row=2, start_column=start_col, end_row=2, end_column=end_col)
+                    cell = ws.cell(row=2, column=start_col)
+                
+                cell.value = seccion.upper()
+                cell.font = subheader_font
+                cell.fill = subheader_fill
+                cell.alignment = center_alignment
+                cell.border = border
+                
+                current_col += len(aspectos)
+            
+            # Fila 3: Nombres de aspectos individuales con numeración jerárquica
+            seccion_counter = {}
+            for item in aspectos_header:
+                cell = ws.cell(row=current_row, column=col_index)
+                
+                # Obtener el índice de la sección
+                seccion = item["seccion"]
+                if seccion not in seccion_counter:
+                    seccion_counter[seccion] = {
+                        "numero_seccion": len(seccion_counter) + 1,
+                        "contador_aspecto": 0
+                    }
+                
+                seccion_counter[seccion]["contador_aspecto"] += 1
+                
+                # Crear numeración jerárquica (ej: 1.1, 1.2, 2.1, 2.2, etc.)
+                numero_seccion = seccion_counter[seccion]["numero_seccion"]
+                numero_aspecto = seccion_counter[seccion]["contador_aspecto"]
+                cell.value = f"{numero_seccion}.{numero_aspecto}"
+                
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = center_alignment
+                cell.border = border
+                col_index += 1
+            
+            # Columnas finales (FECHA ya está en columnas_fijas)
+            columnas_finales = ["NOVEDADES"]
+            for col_name in columnas_finales:
+                cell = ws.cell(row=current_row, column=col_index)
+                cell.value = col_name
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = center_alignment
+                cell.border = border
+                col_index += 1
+            
+            # Escribir datos de cada registro
+            current_row = 4
+            for registro in registros:
+                col_index = 1
+                
+                # Escribir columnas fijas (con FECHA primero)
+                valores_fijos = [
+                    registro.get("fecha_creacion", ""),
+                    registro["id"],
+                    registro.get("lugar_inspeccion", "N/A"),
+                    registro.get("responsable_verificacion", "N/A")
+                ]
+                
+                for valor in valores_fijos:
+                    cell = ws.cell(row=current_row, column=col_index)
+                    cell.value = valor if valor else "N/A"
+                    cell.alignment = center_alignment
+                    cell.border = border
+                    col_index += 1
+                
+                # Crear diccionario de aspectos del registro actual para búsqueda rápida
+                aspectos_dict = {}
+                for seccion in registro.get("aspectos_agrupados", []):
+                    for aspecto in seccion["aspectos"]:
+                        aspectos_dict[aspecto["nombre"]] = aspecto["valor"]
+                
+                # Escribir valores de aspectos en el orden correcto
+                for item in aspectos_header:
+                    cell = ws.cell(row=current_row, column=col_index)
+                    valor = aspectos_dict.get(item["aspecto"], "N/A")
+                    
+                    cell.value = valor
+                    cell.alignment = center_alignment
+                    cell.border = border
+                    
+                    # Aplicar color según el valor
+                    if valor == "SI":
+                        cell.fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+                    elif valor == "NO":
+                        cell.fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+                    
+                    col_index += 1
+                
+                # Escribir novedades (FECHA ya no va al final)
+                cell = ws.cell(row=current_row, column=col_index)
+                cell.value = registro.get("novedades", "")
+                cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+                cell.border = border
+                
+                current_row += 1
+            
+            # Ajustar ancho de columnas
+            for col in range(1, col_index + 1):
+                column_letter = get_column_letter(col)
+                if col <= len(columnas_fijas):
+                    ws.column_dimensions[column_letter].width = 20
+                elif col > col_index - 2:
+                    ws.column_dimensions[column_letter].width = 25
+                else:
+                    ws.column_dimensions[column_letter].width = 8
+            
+            # Ajustar altura de filas
+            ws.row_dimensions[1].height = 25
+            ws.row_dimensions[2].height = 20
+            ws.row_dimensions[3].height = 30
+            
+            # Guardar en BytesIO
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+            
+            headers = {
+                "Content-Disposition": f"attachment; filename=verificacion_{lugar_nombre.replace(' ', '_')}.xlsx",
+                "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+            
+            return {"output": output, "headers": headers}
+            
+        except Exception as e:
+            print(f"Error al exportar Excel: {str(e)}")
+            raise CustomException(f"Error al exportar Excel: {str(e)}")
 
     # Función para obtener los lugares de inspección
     def obtener_lugares_inspeccion(self):

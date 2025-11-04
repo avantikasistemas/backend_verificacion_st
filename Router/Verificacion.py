@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from Class.Verificacion import Verificacion
 from Utils.decorator import http_decorator
 from Config.db import get_db
+from fastapi.responses import Response as FastAPIResponse
 
 verificacion_router = APIRouter()
 
@@ -13,11 +14,14 @@ def guardar_verificacion(request: Request, db: Session = Depends(get_db)):
     response = Verificacion(db).guardar_verificacion(data)
     return response
 
-@verificacion_router.post('/cargar_datos', tags=["Verificacion"], response_model=dict)
+@verificacion_router.post('/cargar_datos', tags=["Verificacion"])
 @http_decorator
 def cargar_datos(request: Request, db: Session = Depends(get_db)):
     data = getattr(request.state, "json_data", {})
     response = Verificacion(db).cargar_datos(data)
+    # Si es una respuesta de tipo FastAPI Response (Excel), devolverla directamente
+    if isinstance(response, FastAPIResponse):
+        return response
     return response
 
 @verificacion_router.post('/obtener_lugares_inspeccion', tags=["Verificacion"], response_model=dict)

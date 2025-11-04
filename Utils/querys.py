@@ -27,20 +27,20 @@ class Querys:
         self.tools = Tools()
         self.query_params = dict()
 
-    # Función auxiliar para convertir valores numéricos a símbolos
+    # Función auxiliar para convertir valores numéricos a texto
     def _convertir_valor_aspecto(self, valor):
         """
-        Convierte valores numéricos de aspectos a símbolos visuales.
-        1 = ✔ (SI)
-        0 = ✖ (NO)
-        2 = NA (No Aplica)
+        Convierte valores numéricos de aspectos a texto.
+        1 = SI
+        0 = NO
+        2 = NO APLICA
         """
         if valor == 1:
-            return "✔"
+            return "SI"
         elif valor == 0:
-            return "✖"
+            return "NO"
         elif valor == 2:
-            return "NA"
+            return "NO APLICA"
         else:
             return valor  # En caso de valor inesperado, retornar el original
 
@@ -177,39 +177,77 @@ class Querys:
             query = query.order_by(IntranetVerificacionModel.id.desc())
             
             if flag_excel:
-                # Para Excel, devolver todos los registros
+                # Para Excel, devolver todos los registros con aspectos agrupados
                 result = query.all()
                 registros = []
                 
                 for row in result:
-                    # Obtener los detalles (aspectos) de esta verificación
+                    # Obtener los detalles (aspectos) de esta verificación agrupados por tipo
                     detalles = self.db.query(
                         IntranetVerificacionDetalleModel,
-                        IntranetAspectosInfraestructuraModel.nombre.label('aspecto_nombre')
+                        IntranetAspectosInfraestructuraModel.nombre.label('aspecto_nombre'),
+                        IntranetTipoAspectosInfraestructuraModel.nombre.label('tipo_nombre'),
+                        IntranetTipoAspectosInfraestructuraModel.id.label('tipo_id')
                     ).join(
                         IntranetAspectosInfraestructuraModel,
                         IntranetVerificacionDetalleModel.aspecto_id == IntranetAspectosInfraestructuraModel.id
+                    ).join(
+                        IntranetTipoAspectosInfraestructuraModel,
+                        IntranetAspectosInfraestructuraModel.tipo_aspecto_id == IntranetTipoAspectosInfraestructuraModel.id
                     ).filter(
                         IntranetVerificacionDetalleModel.verificacion_id == row.IntranetVerificacionModel.id,
                         IntranetVerificacionDetalleModel.estado == 1
+                    ).order_by(
+                        IntranetTipoAspectosInfraestructuraModel.id,
+                        IntranetAspectosInfraestructuraModel.id
                     ).all()
                     
-                    # Crear diccionario base
+                    # Agrupar aspectos por tipo
+                    aspectos_agrupados = {}
+                    for detalle in detalles:
+                        tipo_id = detalle.tipo_id
+                        tipo_nombre = detalle.tipo_nombre
+                        
+                        if tipo_id not in aspectos_agrupados:
+                            aspectos_agrupados[tipo_id] = {
+                                "nombre": tipo_nombre,
+                                "aspectos": []
+                            }
+                        
+                        aspectos_agrupados[tipo_id]["aspectos"].append({
+                            "id": detalle.IntranetVerificacionDetalleModel.aspecto_id,
+                            "nombre": detalle.aspecto_nombre,
+                            "valor": self._convertir_valor_aspecto(
+                                detalle.IntranetVerificacionDetalleModel.valor_seleccionado
+                            )
+                        })
+                    
+                    # Obtener imágenes de esta verificación
+                    imagenes = self.db.query(IntranetVerificacionImagenModel).filter(
+                        IntranetVerificacionImagenModel.verificacion_id == row.IntranetVerificacionModel.id,
+                        IntranetVerificacionImagenModel.estado == 1
+                    ).all()
+                    
+                    imagenes_list = [
+                        {
+                            "id": img.id,
+                            "nombre_archivo": img.nombre_archivo,
+                            "ruta_archivo": img.ruta_archivo
+                        }
+                        for img in imagenes
+                    ]
+                    
+                    # Crear diccionario con aspectos agrupados
                     registro = {
                         "id": row.IntranetVerificacionModel.id,
                         "lugar_inspeccion": row.nombre_lugar,
                         "responsable_verificacion": row.nombre_responsable,
+                        "aspectos_agrupados": list(aspectos_agrupados.values()),
+                        "imagenes": imagenes_list,
                         "novedades": row.IntranetVerificacionModel.novedades,
                         "estado": row.IntranetVerificacionModel.estado,
-                        "created_at": str(row.IntranetVerificacionModel.created_at)
+                        "fecha_creacion": row.IntranetVerificacionModel.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.IntranetVerificacionModel.created_at else None
                     }
-                    
-                    # Agregar cada aspecto como columna dinámica
-                    for detalle in detalles:
-                        aspecto_key = f"aspecto_{detalle.IntranetVerificacionDetalleModel.aspecto_id}"
-                        registro[aspecto_key] = self._convertir_valor_aspecto_excel(
-                            detalle.IntranetVerificacionDetalleModel.valor_seleccionado
-                        )
                     
                     registros.append(registro)
                 
