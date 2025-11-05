@@ -33,14 +33,14 @@ class Querys:
         Convierte valores numéricos de aspectos a texto.
         1 = SI
         0 = NO
-        2 = NO APLICA
+        2 = N/A
         """
         if valor == 1:
             return "SI"
         elif valor == 0:
             return "NO"
         elif valor == 2:
-            return "NO APLICA"
+            return "N/A"
         else:
             return valor  # En caso de valor inesperado, retornar el original
 
@@ -50,14 +50,14 @@ class Querys:
         Convierte valores numéricos de aspectos a texto para exportación Excel.
         1 = SI
         0 = NO
-        2 = NO APLICA
+        2 = N/A
         """
         if valor == 1:
             return "SI"
         elif valor == 0:
             return "NO"
         elif valor == 2:
-            return "NO APLICA"
+            return "N/A"
         else:
             return valor  # En caso de valor inesperado, retornar el original
 
@@ -74,7 +74,8 @@ class Querys:
             datos_maestro = {
                 "lugar_inspeccion_id": data.get("lugar_inspeccion_id"),
                 "responsable_verificacion_id": data.get("responsable_verificacion_id"),
-                "novedades": data.get("novedades")
+                "novedades": data.get("novedades"),
+                "usuario": data.get("usuario", "DESCONOCIDO")
             }
             
             # Crear la instancia del modelo maestro
@@ -245,6 +246,7 @@ class Querys:
                         "aspectos_agrupados": list(aspectos_agrupados.values()),
                         "imagenes": imagenes_list,
                         "novedades": row.IntranetVerificacionModel.novedades,
+                        "usuario": row.IntranetVerificacionModel.usuario,
                         "estado": row.IntranetVerificacionModel.estado,
                         "fecha_creacion": row.IntranetVerificacionModel.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.IntranetVerificacionModel.created_at else None
                     }
@@ -327,6 +329,7 @@ class Querys:
                             "aspectos_agrupados": list(aspectos_agrupados.values()),
                             "imagenes": imagenes_list,
                             "novedades": row.IntranetVerificacionModel.novedades,
+                            "usuario": row.IntranetVerificacionModel.usuario,
                             "estado": row.IntranetVerificacionModel.estado,
                             "fecha_creacion": row.IntranetVerificacionModel.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.IntranetVerificacionModel.created_at else None
                         }
@@ -513,7 +516,9 @@ class Querys:
                 "placa_vehiculo": data.get("placa_vehiculo"),
                 # Campos de aduana y responsable
                 "aduana_id": data.get("aduana_id"),
-                "responsable_aduana_id": data.get("responsable_aduana_id")
+                "responsable_aduana_id": data.get("responsable_aduana_id"),
+                # Usuario del JWT
+                "usuario": data.get("usuario", "DESCONOCIDO")
             }
             
             nueva_inspeccion = IntranetInspeccionCargaModel(datos_encabezado)
@@ -717,6 +722,7 @@ class Querys:
                     "tipo_inspeccion_id": inspeccion.tipo_inspeccion_id,
                     "tipo_inspeccion_nombre": tipo_inspeccion.nombre if tipo_inspeccion else "N/A",
                     "novedades": inspeccion.novedades,
+                    "usuario": inspeccion.usuario,
                     "fecha_creacion": inspeccion.created_at.strftime("%Y-%m-%d %H:%M:%S") if inspeccion.created_at else None,
                     # Campos adicionales según tipo de inspección
                     "numero_contenedor": inspeccion.numero_contenedor,
@@ -860,3 +866,60 @@ class Querys:
             raise CustomException(str(ex))
         finally:
             self.db.close()
+
+    # Función para validar login de usuario
+    def validar_login(self, usuario: str, clave: str):
+        """
+        Valida las credenciales del usuario en la base de datos.
+        
+        Args:
+            usuario (str): Nombre de usuario
+            clave (str): Contraseña (ya en mayúsculas)
+            
+        Returns:
+            dict: Datos del usuario si es válido
+            
+        Raises:
+            CustomException: Si las credenciales son incorrectas o el usuario está bloqueado
+        """
+        try:
+            # Consultar usuario usando SQLAlchemy text para query directo
+            query = text("""
+                SELECT * FROM usuarios WHERE usuario = :usuario
+            """)
+            
+            result = self.db.execute(query, {"usuario": usuario}).fetchone()
+            
+            # Validar si existe el usuario
+            if not result:
+                raise CustomException("Usuario o contraseña incorrectos")
+            
+            result = dict(result._mapping) if result else None
+            
+            # Extraer datos del usuario
+            db_usuario = result['usuario']
+            db_clave = result['clave']
+            db_bloqueado = result['bloqueado']
+            db_nombre = result['des_usuario']
+            db_email = result['mail']
+
+            # Validar contraseña
+            if db_clave != clave:
+                raise CustomException("Usuario o contraseña incorrectos")
+            
+            # Validar si está bloqueado
+            if db_bloqueado and db_bloqueado.upper() == 'S':
+                raise CustomException("Usuario bloqueado. Contacte al administrador")
+            
+            # Retornar datos del usuario
+            return {
+                "usuario": db_usuario,
+                "nombre": db_nombre,
+                "email": db_email
+            }
+            
+        except CustomException as e:
+            raise e
+        except Exception as ex:
+            print(f"Error en validar_login: {str(ex)}")
+            raise CustomException("Error al validar credenciales")

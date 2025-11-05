@@ -226,7 +226,8 @@ class Verificacion:
                 "FECHA",
                 "REGISTRO",
                 "LUGAR INSPECCIÓN",
-                "RESPONSABLE"
+                "RESPONSABLE",
+                "USUARIO"
             ]
             
             # Escribir columnas fijas
@@ -315,7 +316,8 @@ class Verificacion:
                     registro.get("fecha_creacion", ""),
                     registro["id"],
                     registro.get("lugar_inspeccion", "N/A"),
-                    registro.get("responsable_verificacion", "N/A")
+                    registro.get("responsable_verificacion", "N/A"),
+                    registro.get("usuario", "N/A")
                 ]
                 
                 for valor in valores_fijos:

@@ -15,6 +15,7 @@ class IntranetInspeccionCargaModel(BASE):
     placa_vehiculo = Column(Text, nullable=True)
     aduana_id = Column(Integer, nullable=True)
     responsable_aduana_id = Column(Integer, nullable=True)
+    usuario = Column(String(50), nullable=True)
     estado = Column(Integer, default=1)
     created_at = Column(DateTime, default=func.now())
 
@@ -28,4 +29,5 @@ class IntranetInspeccionCargaModel(BASE):
         self.placa_vehiculo = data.get("placa_vehiculo")
         self.aduana_id = data.get("aduana_id")
         self.responsable_aduana_id = data.get("responsable_aduana_id")
+        self.usuario = data.get("usuario")
         self.estado = data.get("estado", 1)

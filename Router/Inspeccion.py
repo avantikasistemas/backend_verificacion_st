@@ -24,6 +24,9 @@ def obtener_aspectos_por_tipo_inspeccion(request: Request, db: Session = Depends
 @http_decorator
 def guardar_carga(request: Request, db: Session = Depends(get_db)):
     data = getattr(request.state, "json_data", {})
+    # Obtener usuario del JWT almacenado en request.state por el middleware
+    user_data = getattr(request.state, "user", {})
+    data["usuario"] = user_data.get("usuario", "DESCONOCIDO")
     response = Inspeccion(db).guardar_carga(data)
     return response
 

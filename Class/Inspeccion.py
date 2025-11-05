@@ -150,6 +150,7 @@ class Inspeccion:
                     "REGISTRO",
                     "ADUANA",
                     "RESPONSABLE",
+                    "USUARIO",
                     "NUMERO CONTENEDOR",
                     "N° SELLO SEGURIDAD",
                     "DOCUMENTO TRANSPORTE"
@@ -160,6 +161,7 @@ class Inspeccion:
                     "REGISTRO",
                     "ADUANA",
                     "RESPONSABLE",
+                    "USUARIO",
                     "EMPRESA TRANSPORTE",
                     "NUMERO CONTENEDOR",
                     "PLACA VEHICULO"
@@ -169,7 +171,8 @@ class Inspeccion:
                     "FECHA",
                     "REGISTRO",
                     "ADUANA",
-                    "RESPONSABLE"
+                    "RESPONSABLE",
+                    "USUARIO"
                 ]
             
             # Escribir columnas fijas
@@ -260,6 +263,7 @@ class Inspeccion:
                         registro["id"],
                         registro.get("aduana_nombre", "N/A"),
                         registro.get("responsable_aduana_nombre", "N/A"),
+                        registro.get("usuario", "N/A"),
                         registro.get("numero_contenedor", "N/A"),
                         registro.get("numero_sello_seguridad", "N/A"),
                         registro.get("documento_transporte", "N/A")
@@ -270,6 +274,7 @@ class Inspeccion:
                         registro["id"],
                         registro.get("aduana_nombre", "N/A"),
                         registro.get("responsable_aduana_nombre", "N/A"),
+                        registro.get("usuario", "N/A"),
                         registro.get("empresa_transporte", "N/A"),
                         registro.get("numero_contenedor", "N/A"),
                         registro.get("placa_vehiculo", "N/A")
@@ -279,7 +284,8 @@ class Inspeccion:
                         registro.get("fecha_creacion", ""),
                         registro["id"],
                         registro.get("aduana_nombre", "N/A"),
-                        registro.get("responsable_aduana_nombre", "N/A")
+                        registro.get("responsable_aduana_nombre", "N/A"),
+                        registro.get("usuario", "N/A")
                     ]
                 
                 for valor in valores_fijos:

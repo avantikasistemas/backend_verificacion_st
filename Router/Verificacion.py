@@ -11,6 +11,9 @@ verificacion_router = APIRouter()
 @http_decorator
 def guardar_verificacion(request: Request, db: Session = Depends(get_db)):
     data = getattr(request.state, "json_data", {})
+    # Obtener usuario del JWT almacenado en request.state por el middleware
+    user_data = getattr(request.state, "user", {})
+    data["usuario"] = user_data.get("usuario", "DESCONOCIDO")
     response = Verificacion(db).guardar_verificacion(data)
     return response
 
