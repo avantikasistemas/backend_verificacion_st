@@ -3,7 +3,7 @@ import base64
 import uuid
 from PIL import Image
 from io import BytesIO
-from datetime import datetime
+from Utils.datetime_utils import get_colombia_time
 
 class ImageUtils:
     """
@@ -62,7 +62,7 @@ class ImageUtils:
                 image.thumbnail((self.max_width, self.max_height), Image.Resampling.LANCZOS)
             
             # Generar nombre único para el archivo
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = get_colombia_time().strftime("%Y%m%d_%H%M%S")
             unique_id = str(uuid.uuid4())[:8]
             extension = "jpg"
             

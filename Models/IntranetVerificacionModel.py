@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text
 from Config.db import BASE
-from datetime import datetime
+from Utils.datetime_utils import get_colombia_time
 
 class IntranetVerificacionModel(BASE):
     __tablename__ = 'intranet_verificacion_items'
@@ -11,7 +11,7 @@ class IntranetVerificacionModel(BASE):
     novedades = Column(Text, nullable=True)
     usuario = Column(String(50), nullable=True)
     estado = Column(Integer, default=1)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=get_colombia_time)
 
     def __init__(self, data):
         self.lugar_inspeccion_id = data.get("lugar_inspeccion_id")

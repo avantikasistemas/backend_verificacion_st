@@ -35,6 +35,9 @@ load_dotenv()
 SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 25))
 
+# Importar función de utilidad de fechas
+from Utils.datetime_utils import get_colombia_time
+
 class Tools:
 
     def outputpdf(self, codigo, file_name, data={}):
@@ -456,7 +459,7 @@ class Tools:
             )
             pdf.setFont("Helvetica", 9)
             pdf.drawString(x_left, base_y + label_offset, "Firma creador")
-            pdf.drawString(250, base_y + label_offset, datetime.now().strftime("%Y%m%d_%H%M%S"))
+            pdf.drawString(250, base_y + label_offset, get_colombia_time().strftime("%Y%m%d_%H%M%S"))
         except Exception as e:
             pdf.setFont("Helvetica-Oblique", 9)
             pdf.drawString(left_margin, base_y + 10, f"[No se pudo cargar firma creador: {e}]")
