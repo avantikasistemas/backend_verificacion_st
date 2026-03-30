@@ -20,7 +20,9 @@ app.mount("/Uploads", StaticFiles(directory=f"{route}/Uploads"), name="Uploads")
 app.add_middleware(JSONMiddleware)
 app.middleware("http")(verify_jwt_middleware)  # Middleware de autenticación JWT
 app.add_middleware(
-    CORSMiddleware,allow_origins=["*"],  # Permitir todos los orígenes; para producción, especifica los orígenes permitidos.
+    CORSMiddleware,
+    # allow_origins=["*"],  # Permitir todos los orígenes; para producción, especifica los orígenes permitidos.
+    allow_origins=["https://verificacion.avantika.com.co"],
     allow_credentials=True,
     allow_methods=["*"],  # Permitir todos los métodos; puedes especificar los métodos permitidos.
     allow_headers=["*"],  # Permitir todos los encabezados; puedes especificar los encabezados permitidos.
