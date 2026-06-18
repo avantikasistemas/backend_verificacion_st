@@ -13,6 +13,12 @@ def obtener_tipo_inspeccion(request: Request, db: Session = Depends(get_db)):
     response = Inspeccion(db).obtener_tipo_inspeccion()
     return response
 
+@inspeccion_router.post('/obtener_modalidad_inspeccion', tags=["Inspeccion"], response_model=dict)
+@http_decorator
+def obtener_modalidad_inspeccion(request: Request, db: Session = Depends(get_db)):
+    response = Inspeccion(db).obtener_modalidad_inspeccion()
+    return response
+
 @inspeccion_router.post('/obtener_aspectos_por_tipo_inspeccion', tags=["Inspeccion"], response_model=dict)
 @http_decorator
 def obtener_aspectos_por_tipo_inspeccion(request: Request, db: Session = Depends(get_db)):
@@ -40,10 +46,24 @@ def cargar_datos_carga(request: Request, db: Session = Depends(get_db)):
         return response
     return response
 
+@inspeccion_router.post('/generar_pdf_inspeccion_carga', tags=["Inspeccion"])
+@http_decorator
+def generar_pdf_inspeccion_carga(request: Request, db: Session = Depends(get_db)):
+    data = getattr(request.state, "json_data", {})
+    response = Inspeccion(db).generar_pdf_inspeccion_carga(data)
+    return response
+
 @inspeccion_router.post('/obtener_aduanas', tags=["Inspeccion"], response_model=dict)
 @http_decorator
 def obtener_aduanas(request: Request, db: Session = Depends(get_db)):
     response = Inspeccion(db).obtener_aduanas()
+    return response
+
+@inspeccion_router.post('/obtener_aduanas_por_modalidad', tags=["Inspeccion"], response_model=dict)
+@http_decorator
+def obtener_aduanas_por_modalidad(request: Request, db: Session = Depends(get_db)):
+    data = getattr(request.state, "json_data", {})
+    response = Inspeccion(db).obtener_aduanas_por_modalidad(data)
     return response
 
 @inspeccion_router.post('/obtener_responsables_por_aduana', tags=["Inspeccion"], response_model=dict)

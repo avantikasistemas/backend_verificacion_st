@@ -9,6 +9,7 @@ class IntranetInspeccionCargaImagenModel(BASE):
     inspeccion_carga_id = Column(Integer, nullable=False)
     nombre_archivo = Column(String(255), nullable=False)
     ruta_archivo = Column(String(500), nullable=False)
+    etiqueta = Column(String(150), nullable=True)
     estado = Column(Integer, default=1)
     created_at = Column(DateTime, default=func.now())
 
@@ -16,4 +17,5 @@ class IntranetInspeccionCargaImagenModel(BASE):
         self.inspeccion_carga_id = data.get("inspeccion_carga_id")
         self.nombre_archivo = data.get("nombre_archivo")
         self.ruta_archivo = data.get("ruta_archivo")
+        self.etiqueta = data.get("etiqueta")
         self.estado = data.get("estado", 1)

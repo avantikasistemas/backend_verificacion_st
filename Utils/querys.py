@@ -19,8 +19,27 @@ from Models.IntranetInspeccionCargaDetalleModel import IntranetInspeccionCargaDe
 from Models.IntranetInspeccionCargaImagenModel import IntranetInspeccionCargaImagenModel
 from Models.IntranetAduanasModel import IntranetAduanasModel
 from Models.IntranetResponsableXAduanasModel import IntranetResponsableXAduanasModel
+from Models.IntranetModalidadInspeccionModel import IntranetModalidadInspeccionModel
+from Models.IntranetAduanaXModalidadModel import IntranetAduanaXModalidadModel
 
 class Querys:
+
+    # Evidencias fotográficas fijas y obligatorias para Tipo 2 (Contenedores)
+    EVIDENCIAS_OBLIGATORIAS_CONTENEDORES = [
+        "Puertas con sellos",
+        "Placa CSC",
+        "Sello de seguridad 1",
+        "Sello de seguridad 2",
+        "Sello de seguridad 3",
+        "Frontal del contenedor",
+        "Costado izquierdo",
+        "Costado derecho",
+        "Interior general",
+        "Pared frontal interna",
+        "Interna del piso",
+        "Interna del techo",
+        "Prueba de luz",
+    ]
 
     def __init__(self, db):
         self.db = db
@@ -60,6 +79,19 @@ class Querys:
             return "N/A"
         else:
             return valor  # En caso de valor inesperado, retornar el original
+
+    # Función auxiliar para obtener el nombre completo de un usuario a partir de su login
+    def _obtener_nombre_usuario(self, usuario: str):
+        """ Busca en la tabla usuarios el nombre completo (des_usuario) a partir del login. """
+        if not usuario:
+            return None
+        try:
+            query = text("SELECT des_usuario FROM usuarios WHERE usuario = :usuario")
+            result = self.db.execute(query, {"usuario": usuario}).fetchone()
+            return result.des_usuario if result else None
+        except Exception as ex:
+            print(f"Error al obtener nombre de usuario: {str(ex)}")
+            return None
 
     # Query para guardar verificacion
     def guardar_verificacion(self, data: dict):
@@ -428,6 +460,31 @@ class Querys:
         finally:
             self.db.close()
 
+    # Query para obtener las modalidades de inspección activas
+    def obtener_modalidad_inspeccion(self):
+        """ Retorna la lista de modalidades de inspección activas (Aéreo, Marítimo) """
+        response = []
+        try:
+            result = self.db.query(
+                IntranetModalidadInspeccionModel
+            ).filter(
+                IntranetModalidadInspeccionModel.estado == 1
+            ).all()
+
+            if result:
+                for row in result:
+                    response.append({
+                        "id": row.id,
+                        "nombre": row.nombre
+                    })
+
+            return response
+        except Exception as ex:
+            print(str(ex))
+            raise CustomException(str(ex))
+        finally:
+            self.db.close()
+
     # Query para obtener los aspectos de carga según tipo de inspección
     def obtener_aspectos_por_tipo_inspeccion(self, tipo_inspeccion_id):
         """ Retorna la lista de aspectos agrupados por tipo/sección según el tipo de inspección """
@@ -502,11 +559,27 @@ class Querys:
         """
         image_utils = ImageUtils()
         inspeccion_id = None
-        
+
         try:
+            # Validar campos obligatorios de fecha/hora de la inspección
+            if not data.get("fecha_hora_inicio") or not data.get("fecha_hora_final"):
+                raise CustomException("Debe indicar fecha y hora de inicio y final de la inspección.")
+
+
+            # El input datetime-local del frontend envía "YYYY-MM-DDTHH:MM";
+            # hay que convertirlo a datetime antes de insertarlo (SQL Server no lo acepta como string)
+            try:
+                fecha_hora_inicio = datetime.fromisoformat(data.get("fecha_hora_inicio"))
+                fecha_hora_final = datetime.fromisoformat(data.get("fecha_hora_final"))
+            except ValueError:
+                raise CustomException("El formato de fecha y hora de inicio/final no es válido.")
+
             # 1. Guardar el encabezado de la inspección
             datos_encabezado = {
                 "tipo_inspeccion_id": data.get("tipo_inspeccion_id"),
+                "modalidad_id": data.get("modalidad_id"),
+                "fecha_hora_inicio": fecha_hora_inicio,
+                "fecha_hora_final": fecha_hora_final,
                 "novedades": data.get("novedades"),
                 # Campos adicionales según tipo de inspección
                 "numero_contenedor": data.get("numero_contenedor"),
@@ -514,6 +587,7 @@ class Querys:
                 "documento_transporte": data.get("documento_transporte"),
                 "empresa_transporte": data.get("empresa_transporte"),
                 "placa_vehiculo": data.get("placa_vehiculo"),
+                "placa_trailer": data.get("placa_trailer"),
                 # Campos de aduana y responsable
                 "aduana_id": data.get("aduana_id"),
                 "responsable_aduana_id": data.get("responsable_aduana_id"),
@@ -560,7 +634,8 @@ class Querys:
                         datos_imagen = {
                             "inspeccion_carga_id": inspeccion_id,
                             "nombre_archivo": resultado["nombre_archivo"],
-                            "ruta_archivo": resultado["ruta_archivo"]
+                            "ruta_archivo": resultado["ruta_archivo"],
+                            "etiqueta": imagen.get("etiqueta")
                         }
                         
                         nueva_imagen = IntranetInspeccionCargaImagenModel(datos_imagen)
@@ -693,9 +768,10 @@ class Querys:
                 imagenes_list = [{
                     "id": img.id,
                     "nombre_archivo": img.nombre_archivo,
-                    "ruta_archivo": img.ruta_archivo
+                    "ruta_archivo": img.ruta_archivo,
+                    "etiqueta": img.etiqueta
                 } for img in imagenes_query]
-                
+
                 # Obtener nombre del tipo de inspección
                 tipo_inspeccion = self.db.query(IntranetTipoInspeccionModel).filter(
                     IntranetTipoInspeccionModel.id == inspeccion.tipo_inspeccion_id
@@ -716,13 +792,29 @@ class Querys:
                         IntranetResponsableVerificacionModel.id == inspeccion.responsable_aduana_id
                     ).first()
                     responsable_aduana_nombre = responsable.nombre if responsable else None
-                
+
+                # Obtener nombre de modalidad si existe
+                modalidad_nombre = None
+                if inspeccion.modalidad_id:
+                    modalidad = self.db.query(IntranetModalidadInspeccionModel).filter(
+                        IntranetModalidadInspeccionModel.id == inspeccion.modalidad_id
+                    ).first()
+                    modalidad_nombre = modalidad.nombre if modalidad else None
+
+                # Obtener nombre completo de la persona que realizó la inspección
+                usuario_nombre = self._obtener_nombre_usuario(inspeccion.usuario)
+
                 response.append({
                     "id": inspeccion.id,
                     "tipo_inspeccion_id": inspeccion.tipo_inspeccion_id,
                     "tipo_inspeccion_nombre": tipo_inspeccion.nombre if tipo_inspeccion else "N/A",
+                    "modalidad_id": inspeccion.modalidad_id,
+                    "modalidad_nombre": modalidad_nombre,
+                    "fecha_hora_inicio": inspeccion.fecha_hora_inicio.strftime("%Y-%m-%d %H:%M:%S") if inspeccion.fecha_hora_inicio else None,
+                    "fecha_hora_final": inspeccion.fecha_hora_final.strftime("%Y-%m-%d %H:%M:%S") if inspeccion.fecha_hora_final else None,
                     "novedades": inspeccion.novedades,
                     "usuario": inspeccion.usuario,
+                    "usuario_nombre": usuario_nombre or inspeccion.usuario,
                     "fecha_creacion": inspeccion.created_at.strftime("%Y-%m-%d %H:%M:%S") if inspeccion.created_at else None,
                     # Campos adicionales según tipo de inspección
                     "numero_contenedor": inspeccion.numero_contenedor,
@@ -730,6 +822,7 @@ class Querys:
                     "documento_transporte": inspeccion.documento_transporte,
                     "empresa_transporte": inspeccion.empresa_transporte,
                     "placa_vehiculo": inspeccion.placa_vehiculo,
+                    "placa_trailer": inspeccion.placa_trailer,
                     # Campos de aduana y responsable
                     "aduana_id": inspeccion.aduana_id,
                     "aduana_nombre": aduana_nombre,
@@ -742,6 +835,114 @@ class Querys:
             return {"registros": response, "cant_registros": cant_registros}
         except Exception as ex:
             print(f"Error en cargar_datos_carga: {str(ex)}")
+            raise CustomException(str(ex))
+        finally:
+            self.db.close()
+
+    # Query para obtener el detalle completo de una sola inspección de carga (para el PDF)
+    def obtener_detalle_inspeccion_carga(self, inspeccion_id: int):
+        """ Retorna el detalle completo (encabezado, aspectos e imágenes) de una inspección de carga. """
+        try:
+            inspeccion = self.db.query(IntranetInspeccionCargaModel).filter(
+                IntranetInspeccionCargaModel.id == inspeccion_id
+            ).first()
+
+            if not inspeccion:
+                raise CustomException("No se encontró la inspección solicitada.")
+
+            detalles_query = self.db.query(
+                IntranetInspeccionCargaDetalleModel.aspecto_id,
+                IntranetInspeccionCargaDetalleModel.valor_seleccionado,
+                IntranetAspectosCargaModel.nombre.label('aspecto_nombre'),
+                IntranetAspectosCargaModel.tipo_aspecto_id,
+                IntranetTipoAspectosInfraestructuraModel.nombre.label('seccion_nombre')
+            ).join(
+                IntranetAspectosCargaModel,
+                IntranetInspeccionCargaDetalleModel.aspecto_id == IntranetAspectosCargaModel.id
+            ).join(
+                IntranetTipoAspectosInfraestructuraModel,
+                IntranetAspectosCargaModel.tipo_aspecto_id == IntranetTipoAspectosInfraestructuraModel.id
+            ).filter(
+                IntranetInspeccionCargaDetalleModel.inspeccion_carga_id == inspeccion.id,
+                IntranetInspeccionCargaDetalleModel.estado == 1
+            ).order_by(
+                IntranetAspectosCargaModel.tipo_aspecto_id,
+                IntranetAspectosCargaModel.id
+            ).all()
+
+            aspectos_agrupados = {}
+            for detalle in detalles_query:
+                seccion_id = detalle.tipo_aspecto_id
+                if seccion_id not in aspectos_agrupados:
+                    aspectos_agrupados[seccion_id] = {
+                        "seccion_id": seccion_id,
+                        "seccion_nombre": detalle.seccion_nombre,
+                        "aspectos": []
+                    }
+                aspectos_agrupados[seccion_id]["aspectos"].append({
+                    "aspecto_id": detalle.aspecto_id,
+                    "aspecto_nombre": detalle.aspecto_nombre,
+                    "valor": self._convertir_valor_aspecto_excel(detalle.valor_seleccionado)
+                })
+
+            tipo_inspeccion = self.db.query(IntranetTipoInspeccionModel).filter(
+                IntranetTipoInspeccionModel.id == inspeccion.tipo_inspeccion_id
+            ).first()
+
+            aduana_nombre = None
+            if inspeccion.aduana_id:
+                aduana = self.db.query(IntranetAduanasModel).filter(
+                    IntranetAduanasModel.id == inspeccion.aduana_id
+                ).first()
+                aduana_nombre = aduana.nombre if aduana else None
+
+            modalidad_nombre = None
+            if inspeccion.modalidad_id:
+                modalidad = self.db.query(IntranetModalidadInspeccionModel).filter(
+                    IntranetModalidadInspeccionModel.id == inspeccion.modalidad_id
+                ).first()
+                modalidad_nombre = modalidad.nombre if modalidad else None
+
+            usuario_nombre = self._obtener_nombre_usuario(inspeccion.usuario)
+
+            imagenes_query = self.db.query(
+                IntranetInspeccionCargaImagenModel
+            ).filter(
+                IntranetInspeccionCargaImagenModel.inspeccion_carga_id == inspeccion.id,
+                IntranetInspeccionCargaImagenModel.estado == 1
+            ).all()
+
+            imagenes_list = [{
+                "id": img.id,
+                "nombre_archivo": img.nombre_archivo,
+                "ruta_archivo": img.ruta_archivo,
+                "etiqueta": img.etiqueta
+            } for img in imagenes_query]
+
+            return {
+                "id": inspeccion.id,
+                "tipo_inspeccion_id": inspeccion.tipo_inspeccion_id,
+                "tipo_inspeccion_nombre": tipo_inspeccion.nombre if tipo_inspeccion else "N/A",
+                "modalidad_nombre": modalidad_nombre,
+                "fecha_hora_inicio": inspeccion.fecha_hora_inicio.strftime("%Y-%m-%d %H:%M:%S") if inspeccion.fecha_hora_inicio else None,
+                "fecha_hora_final": inspeccion.fecha_hora_final.strftime("%Y-%m-%d %H:%M:%S") if inspeccion.fecha_hora_final else None,
+                "novedades": inspeccion.novedades,
+                "usuario_nombre": usuario_nombre or inspeccion.usuario,
+                "imagenes": imagenes_list,
+                "fecha_creacion": inspeccion.created_at.strftime("%Y-%m-%d %H:%M:%S") if inspeccion.created_at else None,
+                "numero_contenedor": inspeccion.numero_contenedor,
+                "numero_sello_seguridad": inspeccion.numero_sello_seguridad,
+                "documento_transporte": inspeccion.documento_transporte,
+                "empresa_transporte": inspeccion.empresa_transporte,
+                "placa_vehiculo": inspeccion.placa_vehiculo,
+                "placa_trailer": inspeccion.placa_trailer,
+                "aduana_nombre": aduana_nombre,
+                "aspectos": list(aspectos_agrupados.values())
+            }
+        except CustomException:
+            raise
+        except Exception as ex:
+            print(f"Error en obtener_detalle_inspeccion_carga: {str(ex)}")
             raise CustomException(str(ex))
         finally:
             self.db.close()
@@ -764,6 +965,41 @@ class Querys:
                         "nombre": row.nombre
                     })
             
+            return response
+        except Exception as ex:
+            print(str(ex))
+            raise CustomException(str(ex))
+        finally:
+            self.db.close()
+
+    # Query para obtener las aduanas asociadas a una modalidad con JOIN
+    def obtener_aduanas_por_modalidad(self, modalidad_id: int):
+        """ Retorna la lista de aduanas asociadas a una modalidad específica (Aéreo/Marítimo) """
+        try:
+            response = []
+
+            result = self.db.query(
+                IntranetAduanasModel.id,
+                IntranetAduanasModel.nombre
+            ).join(
+                IntranetAduanaXModalidadModel,
+                IntranetAduanaXModalidadModel.aduana_id == IntranetAduanasModel.id
+            ).filter(
+                IntranetAduanaXModalidadModel.modalidad_id == modalidad_id,
+                IntranetAduanaXModalidadModel.estado == 1,
+                IntranetAduanasModel.estado == 1
+            ).all()
+
+            if result:
+                for row in result:
+                    response.append({
+                        "id": row.id,
+                        "nombre": row.nombre
+                    })
+                # El campo "nombre" es tipo TEXT en la BD y SQL Server no permite
+                # ORDER BY sobre TEXT/NTEXT/IMAGE, por eso se ordena aquí en Python.
+                response.sort(key=lambda a: a["nombre"] or "")
+
             return response
         except Exception as ex:
             print(str(ex))

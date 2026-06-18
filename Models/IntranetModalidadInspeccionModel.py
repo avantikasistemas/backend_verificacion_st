@@ -1,0 +1,12 @@
+from sqlalchemy import Column, Integer, DateTime, String
+from Config.db import BASE
+from Utils.datetime_utils import get_colombia_time
+
+class IntranetModalidadInspeccionModel(BASE):
+    __tablename__ = 'intranet_modalidad_inspeccion'
+    __table_args__ = {'schema': 'dbo'}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(100), nullable=False)
+    estado = Column(Integer, default=1)
+    created_at = Column(DateTime, default=get_colombia_time)
