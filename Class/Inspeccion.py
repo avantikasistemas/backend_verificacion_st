@@ -443,12 +443,12 @@ class Inspeccion:
         output = BytesIO()
         doc = SimpleDocTemplate(
             output, pagesize=letter,
-            topMargin=1.5*cm, bottomMargin=1.5*cm, leftMargin=1.5*cm, rightMargin=1.5*cm
+            topMargin=0.7*cm, bottomMargin=1.5*cm, leftMargin=1.5*cm, rightMargin=1.5*cm
         )
         ancho_disponible = doc.width
 
         styles = getSampleStyleSheet()
-        titulo_style = ParagraphStyle('Titulo', parent=styles['Heading1'], fontSize=14, spaceAfter=12)
+        titulo_style = ParagraphStyle('Titulo', parent=styles['Heading1'], fontSize=14, spaceAfter=12, alignment=0)
         subtitulo_style = ParagraphStyle('Subtitulo', parent=styles['Heading2'], fontSize=11, spaceAfter=6)
         normal_style = styles['Normal']
         label_style = ParagraphStyle('Label', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, leading=12)
@@ -467,12 +467,12 @@ class Inspeccion:
         if logo_path.exists():
             lector_logo = ImageReader(str(logo_path))
             ancho_logo_original, alto_logo_original = lector_logo.getSize()
-            ancho_logo = 3.5 * cm
+            ancho_logo = 7 * cm
             alto_logo = ancho_logo * (alto_logo_original / ancho_logo_original)
             tabla_encabezado = Table(
                 [[RLImage(str(logo_path), width=ancho_logo, height=alto_logo),
-                  Paragraph(f"Detalle de Inspección #{detalle.get('id')}", titulo_style)]],
-                colWidths=[ancho_logo + 0.3*cm, ancho_disponible - ancho_logo - 0.3*cm]
+                  Paragraph("Detalle de Inspección", titulo_style)]],
+                colWidths=[ancho_logo + 0.2*cm, ancho_disponible - ancho_logo - 0.2*cm]
             )
             tabla_encabezado.setStyle(TableStyle([
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -481,7 +481,7 @@ class Inspeccion:
             elementos.append(tabla_encabezado)
             elementos.append(Spacer(1, 10))
         else:
-            elementos.append(Paragraph(f"Detalle de Inspección #{detalle.get('id')}", titulo_style))
+            elementos.append(Paragraph("Detalle de Inspección", titulo_style))
 
         # Información general (layout de 2 columnas: etiqueta / valor, una pareja por fila)
         elementos.append(Paragraph("Información General", subtitulo_style))
