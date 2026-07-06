@@ -707,7 +707,7 @@ class Querys:
                 query = query.filter(IntranetInspeccionCargaModel.created_at.between(fecha_inicio, fecha_fin))
             
             # Ordenar por fecha descendente
-            query = query.order_by(IntranetInspeccionCargaModel.id.desc())
+            query = query.order_by(IntranetInspeccionCargaModel.created_at.desc())
             
             # Obtener el total de registros
             cant_registros = query.count()
