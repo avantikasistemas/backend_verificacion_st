@@ -46,3 +46,10 @@ def obtener_aspectos_por_lugar(request: Request, db: Session = Depends(get_db)):
     data = getattr(request.state, "json_data", {})
     response = Verificacion(db).obtener_aspectos_por_lugar(data)
     return response
+
+@verificacion_router.post('/generar_pdf_verificacion', tags=["Verificacion"])
+@http_decorator
+def generar_pdf_verificacion(request: Request, db: Session = Depends(get_db)):
+    data = getattr(request.state, "json_data", {})
+    response = Verificacion(db).generar_pdf_verificacion(data)
+    return response

@@ -579,8 +579,15 @@ class Inspeccion:
             elementos.append(Paragraph(f"Imágenes Adjuntas ({len(imagenes)})", subtitulo_style))
             uploads_dir = Path.cwd() / "Uploads"
             ancho_imagen = ancho_disponible * 0.6
+            etiqueta_style = ParagraphStyle(
+                'Etiqueta', parent=styles['Normal'], fontSize=9, leading=12,
+                alignment=1, fontName='Helvetica-Bold', textColor=colors.HexColor('#21618c')
+            )
             for img in imagenes:
+                etiqueta = mayus(img.get("etiqueta")) or ""
                 ruta_completa = uploads_dir / img.get("ruta_archivo", "")
+                if ruta_completa.suffix.lower() == ".pdf":
+                    continue
                 try:
                     if not ruta_completa.exists():
                         raise FileNotFoundError(str(ruta_completa))
@@ -588,6 +595,7 @@ class Inspeccion:
                     ancho_original, alto_original = lector.getSize()
                     alto_imagen = ancho_imagen * (alto_original / ancho_original)
                     elementos.append(RLImage(str(ruta_completa), width=ancho_imagen, height=alto_imagen))
+                    elementos.append(Paragraph(etiqueta, etiqueta_style))
                     elementos.append(Spacer(1, 10))
                 except Exception as img_ex:
                     print(f"No se pudo incluir la imagen {img.get('ruta_archivo')} en el PDF: {img_ex}")

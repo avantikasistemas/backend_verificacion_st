@@ -431,6 +431,173 @@ class Verificacion:
             print(f"Error al obtener responsables: {e}")
             raise CustomException(f"{e}")
 
+    # Función para generar el PDF con el detalle de una verificación (igual al modal de detalle)
+    def generar_pdf_verificacion(self, data: dict):
+        """ Genera un PDF con el detalle de una verificación de infraestructura (igual al modal de detalle). """
+        try:
+            verificacion_id = data.get("id")
+            detalle = self.querys.obtener_detalle_verificacion(verificacion_id)
+
+            pdf_bytes = self._construir_pdf_detalle_verificacion(detalle)
+
+            headers = {
+                "Content-Disposition": f"attachment; filename=verificacion_{verificacion_id}.pdf",
+            }
+            return Response(
+                content=pdf_bytes,
+                headers=headers,
+                media_type="application/pdf"
+            )
+
+        except CustomException as e:
+            print(f"Error al generar PDF de verificación: {e}")
+            raise CustomException(f"{e}")
+
+    # Función auxiliar que construye el PDF del detalle con reportlab
+    def _construir_pdf_detalle_verificacion(self, detalle: dict):
+        from pathlib import Path
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.utils import ImageReader
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+
+        output = BytesIO()
+        doc = SimpleDocTemplate(
+            output, pagesize=letter,
+            topMargin=0.7*cm, bottomMargin=1.5*cm, leftMargin=1.5*cm, rightMargin=1.5*cm
+        )
+        ancho_disponible = doc.width
+
+        styles = getSampleStyleSheet()
+        titulo_style = ParagraphStyle('Titulo', parent=styles['Heading1'], fontSize=14, spaceAfter=12, alignment=0)
+        subtitulo_style = ParagraphStyle('Subtitulo', parent=styles['Heading2'], fontSize=11, spaceAfter=6)
+        normal_style = styles['Normal']
+        label_style = ParagraphStyle('Label', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, leading=12)
+        valor_style = ParagraphStyle('Valor', parent=styles['Normal'], fontSize=9, leading=12)
+        aspecto_style = ParagraphStyle('Aspecto', parent=styles['Normal'], fontSize=8.5, leading=11)
+        resultado_style = ParagraphStyle('Resultado', parent=styles['Normal'], fontSize=9, leading=11, alignment=1)
+
+        # Convierte a mayúsculas cualquier valor de texto (deja intactos None/números)
+        def mayus(valor):
+            return valor.upper() if isinstance(valor, str) else valor
+
+        elementos = []
+
+        # Encabezado con el logotipo a la izquierda y el título al lado
+        logo_path = Path.cwd() / "logotipo.png"
+        if logo_path.exists():
+            lector_logo = ImageReader(str(logo_path))
+            ancho_logo_original, alto_logo_original = lector_logo.getSize()
+            ancho_logo = 7 * cm
+            alto_logo = ancho_logo * (alto_logo_original / ancho_logo_original)
+            tabla_encabezado = Table(
+                [[RLImage(str(logo_path), width=ancho_logo, height=alto_logo),
+                  Paragraph("Detalle de Verificación", titulo_style)]],
+                colWidths=[ancho_logo + 0.2*cm, ancho_disponible - ancho_logo - 0.2*cm]
+            )
+            tabla_encabezado.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (0, 0), 0),
+            ]))
+            elementos.append(tabla_encabezado)
+            elementos.append(Spacer(1, 10))
+        else:
+            elementos.append(Paragraph("Detalle de Verificación", titulo_style))
+
+        # Información general (layout de 2 columnas: etiqueta / valor, una pareja por fila)
+        elementos.append(Paragraph("Información General", subtitulo_style))
+        pares_info = [
+            ("Lugar de Inspección:", mayus(detalle.get("lugar_inspeccion")) or "N/A"),
+            ("Responsable:", mayus(detalle.get("responsable_verificacion")) or "N/A"),
+            ("Fecha de Creación:", detalle.get("fecha_creacion") or "N/A"),
+            ("Persona que realizó la verificación:", mayus(detalle.get("usuario_nombre")) or "N/A"),
+        ]
+
+        filas_info = []
+        for i in range(0, len(pares_info), 2):
+            fila = []
+            for label, valor in pares_info[i:i+2]:
+                fila.append(Paragraph(label, label_style))
+                fila.append(Paragraph(str(valor), valor_style))
+            if len(fila) == 2:
+                fila.extend(["", ""])
+            filas_info.append(fila)
+
+        col_etiqueta = ancho_disponible * 0.18
+        col_valor = ancho_disponible * 0.32
+        tabla_info = Table(filas_info, colWidths=[col_etiqueta, col_valor, col_etiqueta, col_valor])
+        tabla_info.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ]))
+        elementos.append(tabla_info)
+        elementos.append(Spacer(1, 10))
+
+        elementos.append(Paragraph("Novedades", subtitulo_style))
+        elementos.append(Paragraph(mayus(detalle.get("novedades")) or "SIN NOVEDADES", normal_style))
+        elementos.append(Spacer(1, 14))
+
+        # Aspectos evaluados
+        elementos.append(Paragraph("Aspectos Evaluados", subtitulo_style))
+        col_aspecto = ancho_disponible * 0.80
+        col_resultado = ancho_disponible * 0.20
+        for idx_seccion, seccion in enumerate(detalle.get("aspectos_agrupados", []), start=1):
+            elementos.append(Paragraph(f"{idx_seccion}. {seccion['nombre']}", styles['Heading3']))
+            filas = [[
+                Paragraph("Aspecto", ParagraphStyle('AspectoHeader', parent=aspecto_style, textColor=colors.white, fontName='Helvetica-Bold')),
+                Paragraph("Resultado", ParagraphStyle('ResultadoHeader', parent=resultado_style, textColor=colors.white, fontName='Helvetica-Bold')),
+            ]]
+            for idx_aspecto, aspecto in enumerate(seccion["aspectos"], start=1):
+                color_resultado = colors.black
+                if aspecto['valor'] == 'SI':
+                    color_resultado = colors.HexColor('#1e8449')
+                elif aspecto['valor'] == 'NO':
+                    color_resultado = colors.HexColor('#c0392b')
+                filas.append([
+                    Paragraph(f"{idx_seccion}.{idx_aspecto} {aspecto['nombre']}", aspecto_style),
+                    Paragraph(aspecto['valor'], ParagraphStyle('ResultadoValor', parent=resultado_style, textColor=color_resultado, fontName='Helvetica-Bold')),
+                ])
+            tabla_aspectos = Table(filas, colWidths=[col_aspecto, col_resultado], repeatRows=1)
+            tabla_aspectos.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#aed6f1')),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            elementos.append(tabla_aspectos)
+            elementos.append(Spacer(1, 10))
+
+        # Imágenes adjuntas
+        imagenes = detalle.get("imagenes") or []
+        if imagenes:
+            elementos.append(Spacer(1, 6))
+            elementos.append(Paragraph(f"Imágenes Adjuntas ({len(imagenes)})", subtitulo_style))
+            uploads_dir = Path.cwd() / "Uploads"
+            ancho_imagen = ancho_disponible * 0.6
+            for img in imagenes:
+                ruta_completa = uploads_dir / img.get("ruta_archivo", "")
+                try:
+                    if not ruta_completa.exists():
+                        raise FileNotFoundError(str(ruta_completa))
+                    lector = ImageReader(str(ruta_completa))
+                    ancho_original, alto_original = lector.getSize()
+                    alto_imagen = ancho_imagen * (alto_original / ancho_original)
+                    elementos.append(RLImage(str(ruta_completa), width=ancho_imagen, height=alto_imagen))
+                    elementos.append(Spacer(1, 10))
+                except Exception as img_ex:
+                    print(f"No se pudo incluir la imagen {img.get('ruta_archivo')} en el PDF: {img_ex}")
+                    continue
+
+        doc.build(elementos)
+        output.seek(0)
+        return output.read()
+
     # Función para obtener los aspectos por lugar de inspección
     def obtener_aspectos_por_lugar(self, data: dict):
         """ Api que obtiene los aspectos de infraestructura asociados a un lugar de inspección. """

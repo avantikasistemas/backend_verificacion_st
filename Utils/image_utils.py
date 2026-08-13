@@ -92,6 +92,48 @@ class ImageUtils:
             print(f"Error al comprimir y guardar imagen: {str(ex)}")
             raise Exception(f"Error al procesar imagen: {str(ex)}")
     
+    def guardar_archivo_pdf(self, base64_string, nombre_original=None):
+        """
+        Guarda un archivo PDF codificado en base64 tal cual, sin pasar por Pillow.
+
+        Args:
+            base64_string (str): String base64 del PDF
+            nombre_original (str): Nombre original del archivo (opcional)
+
+        Returns:
+            dict: {
+                "nombre_archivo": nombre del archivo guardado,
+                "ruta_archivo": ruta relativa del archivo,
+                "ruta_completa": ruta absoluta del archivo
+            }
+        """
+        try:
+            # Remover el prefijo data:application/pdf;base64, si existe
+            if ',' in base64_string:
+                base64_string = base64_string.split(',')[1]
+
+            file_data = base64.b64decode(base64_string)
+
+            timestamp = get_colombia_time().strftime("%Y%m%d_%H%M%S")
+            unique_id = str(uuid.uuid4())[:8]
+
+            nombre_base = os.path.splitext(nombre_original)[0] if nombre_original else "documento"
+            nombre_archivo = f"{nombre_base}_{timestamp}_{unique_id}.pdf"
+
+            ruta_completa = os.path.join(self.upload_folder, nombre_archivo)
+            with open(ruta_completa, "wb") as archivo:
+                archivo.write(file_data)
+
+            return {
+                "nombre_archivo": nombre_archivo,
+                "ruta_archivo": nombre_archivo,
+                "ruta_completa": ruta_completa
+            }
+
+        except Exception as ex:
+            print(f"Error al guardar archivo PDF: {str(ex)}")
+            raise Exception(f"Error al procesar archivo PDF: {str(ex)}")
+
     def eliminar_imagen(self, ruta_relativa):
         """
         Elimina una imagen del servidor.

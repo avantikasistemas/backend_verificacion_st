@@ -624,12 +624,21 @@ class Querys:
             for imagen in imagenes:
                 if imagen.get("base64"):
                     try:
-                        # Comprimir y guardar la imagen
-                        resultado = image_utils.comprimir_y_guardar_imagen(
-                            imagen.get("base64"),
-                            imagen.get("nombre")
-                        )
-                        
+                        base64_str = imagen.get("base64")
+                        es_pdf = base64_str.startswith("data:application/pdf") or (imagen.get("nombre") or "").lower().endswith(".pdf")
+
+                        if es_pdf:
+                            resultado = image_utils.guardar_archivo_pdf(
+                                base64_str,
+                                imagen.get("nombre")
+                            )
+                        else:
+                            # Comprimir y guardar la imagen
+                            resultado = image_utils.comprimir_y_guardar_imagen(
+                                base64_str,
+                                imagen.get("nombre")
+                            )
+
                         # Guardar registro en la base de datos
                         datos_imagen = {
                             "inspeccion_carga_id": inspeccion_id,
@@ -1041,6 +1050,93 @@ class Querys:
             self.db.close()
 
         # Query para obtener los aspectos de infraestructura según lugar de inspección
+
+    # Query para obtener el detalle completo de una verificación (encabezado, aspectos e imágenes)
+    def obtener_detalle_verificacion(self, verificacion_id: int):
+        """ Retorna el detalle completo (encabezado, aspectos e imágenes) de una verificación de infraestructura. """
+        try:
+            row = self.db.query(
+                IntranetVerificacionModel,
+                IntranetLugarInspeccionModel.nombre.label('nombre_lugar'),
+                IntranetResponsableVerificacionModel.nombre.label('nombre_responsable')
+            ).join(
+                IntranetLugarInspeccionModel,
+                IntranetVerificacionModel.lugar_inspeccion_id == IntranetLugarInspeccionModel.id
+            ).join(
+                IntranetResponsableVerificacionModel,
+                IntranetVerificacionModel.responsable_verificacion_id == IntranetResponsableVerificacionModel.id
+            ).filter(
+                IntranetVerificacionModel.id == verificacion_id
+            ).first()
+
+            if not row:
+                raise CustomException("No se encontró la verificación solicitada.")
+
+            verificacion = row.IntranetVerificacionModel
+
+            detalles = self.db.query(
+                IntranetVerificacionDetalleModel,
+                IntranetAspectosInfraestructuraModel.nombre.label('aspecto_nombre'),
+                IntranetTipoAspectosInfraestructuraModel.nombre.label('tipo_nombre'),
+                IntranetTipoAspectosInfraestructuraModel.id.label('tipo_id')
+            ).join(
+                IntranetAspectosInfraestructuraModel,
+                IntranetVerificacionDetalleModel.aspecto_id == IntranetAspectosInfraestructuraModel.id
+            ).join(
+                IntranetTipoAspectosInfraestructuraModel,
+                IntranetAspectosInfraestructuraModel.tipo_aspecto_id == IntranetTipoAspectosInfraestructuraModel.id
+            ).filter(
+                IntranetVerificacionDetalleModel.verificacion_id == verificacion.id,
+                IntranetVerificacionDetalleModel.estado == 1
+            ).order_by(
+                IntranetTipoAspectosInfraestructuraModel.id,
+                IntranetAspectosInfraestructuraModel.id
+            ).all()
+
+            aspectos_agrupados = {}
+            for detalle in detalles:
+                tipo_id = detalle.tipo_id
+                if tipo_id not in aspectos_agrupados:
+                    aspectos_agrupados[tipo_id] = {
+                        "nombre": detalle.tipo_nombre,
+                        "aspectos": []
+                    }
+                aspectos_agrupados[tipo_id]["aspectos"].append({
+                    "id": detalle.IntranetVerificacionDetalleModel.aspecto_id,
+                    "nombre": detalle.aspecto_nombre,
+                    "valor": self._convertir_valor_aspecto(detalle.IntranetVerificacionDetalleModel.valor_seleccionado)
+                })
+
+            usuario_nombre = self._obtener_nombre_usuario(verificacion.usuario)
+
+            imagenes = self.db.query(IntranetVerificacionImagenModel).filter(
+                IntranetVerificacionImagenModel.verificacion_id == verificacion.id,
+                IntranetVerificacionImagenModel.estado == 1
+            ).all()
+
+            imagenes_list = [{
+                "id": img.id,
+                "nombre_archivo": img.nombre_archivo,
+                "ruta_archivo": img.ruta_archivo
+            } for img in imagenes]
+
+            return {
+                "id": verificacion.id,
+                "lugar_inspeccion": row.nombre_lugar,
+                "responsable_verificacion": row.nombre_responsable,
+                "novedades": verificacion.novedades,
+                "usuario_nombre": usuario_nombre or verificacion.usuario,
+                "fecha_creacion": verificacion.created_at.strftime("%Y-%m-%d %H:%M:%S") if verificacion.created_at else None,
+                "aspectos_agrupados": list(aspectos_agrupados.values()),
+                "imagenes": imagenes_list
+            }
+        except CustomException:
+            raise
+        except Exception as ex:
+            print(f"Error en obtener_detalle_verificacion: {str(ex)}")
+            raise CustomException(str(ex))
+        finally:
+            self.db.close()
 
     # Query para obtener los aspectos de infraestructura según lugar de inspección
     def obtener_aspectos_por_lugar_inspeccion(self, lugar_inspeccion_id: int):
